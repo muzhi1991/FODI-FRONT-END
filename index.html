@@ -260,6 +260,63 @@
         font-family: initial;
       }
 
+      .markdown-alert {
+        padding: 0 1em;
+        margin-bottom: 16px;
+        color: inherit;
+        border-left: 0.25em solid #444c56;
+      }
+
+      .markdown-alert-title {
+        display: inline-flex;
+        align-items: center;
+        font-weight: 500;
+      }
+
+      .markdown-alert-note {
+        border-left-color: #539bf5;
+      }
+
+      .markdown-alert-tip {
+        border-left-color: #57ab5a;
+      }
+
+      .markdown-alert-important {
+        border-left-color: #986ee2;
+      }
+
+      .markdown-alert-warning {
+        border-left-color: #c69026;
+      }
+
+      .markdown-alert-caution {
+        border-left-color: #e5534b;
+      }
+
+      .markdown-alert-note > .markdown-alert-title {
+        color: #539bf5;
+      }
+
+      .markdown-alert-tip > .markdown-alert-title {
+        color: #57ab5a;
+      }
+
+      .markdown-alert-important > .markdown-alert-title {
+        color: #986ee2;
+      }
+
+      .markdown-alert-warning > .markdown-alert-title {
+        color: #c69026;
+      }
+
+      .markdown-alert-caution > .markdown-alert-title {
+        color: #e5534b;
+      }
+
+      .mr-2 {
+        margin-right: 0.5rem;
+      }
+
       pre,
       code,
       pre *,
@@ -732,7 +789,7 @@
 
       function fromCdn(cdnName, ...resources) {
         const cdnMap = {
-          jsdelivr: '//cdn.jsdelivr.net/npm',
+          jsdelivr: '//gcore.jsdelivr.net/npm',
           taobao: '//registry.npmmirror.com',
           bytedance: '//lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M',
         };
@@ -740,8 +797,9 @@
         return resources.map((r) => `${baseURL}${r}`);
       }
 
-      function loadResource(resources) {
-        return Promise.all(resources.map(load));
+      function loadResource(...resources) {
+        const allResources = resources.flat();
+        return Promise.all(allResources.map(load));
 
         function load(resource) {
           if (!window.resourceCache[resource]) {
@@ -1159,12 +1217,24 @@
 
         await loadResource(
           fromCdn(
+            'taobao',
+            '/marked/15.0.4/files/marked.min.js',
+            '/marked-highlight/2.2.1/files/lib/index.umd.js'
+          ),
+          fromCdn(
             'bytedance',
             '/github-markdown-css/5.1.0/github-markdown-light.min.css',
             '/highlight.js/11.4.0/styles/github.min.css',
-            '/highlight.js/11.4.0/highlight.min.js',
-            '/marked/4.0.2/marked.min.js'
-          )
+            '/highlight.js/11.4.0/highlight.min.js'
+          ),
+          // Optional Markdown extensions
+          // fromCdn('jsdelivr', '/marked-alert@2.1.2/dist/index.umd.js'),
+          // fromCdn(
+          //   'taobao',
+          //   '/marked-katex-extension/5.1.3/files/lib/index.umd.js',
+          //   '/katex/0.16.19/files/dist/katex.min.css',
+          //   '/katex/0.16.19/files/dist/katex.min.js'
+          // )
         );
 
         const render = (text) => {
@@ -1176,7 +1246,6 @@
             return;
           }
 
-          // It is not possible to load resources that are not cached and in an encrypted path.
           const transformHref = (href) => {
             if (href.startsWith('http') || href.startsWith('//')) {
               return href;
@@ -1201,25 +1270,31 @@
           };
 
           const renderer = new marked.Renderer();
-          renderer.image = (href, title, text) =>
-            `<img src="${transformHref(href)}" alt="${text}">`;
-          renderer.link = (href, title, text) =>
-            `<a href="${transformHref(href)}">${text}</a>`;
+          renderer.image = (href) =>
+            `<img src="${transformHref(href.href)}" alt="${href.text}">`;
+          renderer.link = (href) =>
+            `<a href="${transformHref(href.href)}">${href.text}</a>`;
 
-          text = marked.parse(text, {
-            gfm: true,
-            renderer: renderer,
-            highlight: (code, language, callback) => {
-              try {
-                return hljs.highlight(code, {
-                  language,
-                  ignoreIllegals: true,
-                }).value;
-              } catch (_) {
-                return code;
-              }
-            },
-          });
+          text = new marked
+            .Marked(
+              markedHighlight.markedHighlight({
+                langPrefix: 'hljs language-',
+                highlight(code, lang, info) {
+                  const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                  return hljs.highlight(code, { language }).value;
+                }
+              }),
+              // Optional Markdown extensions
+              // markedAlert(),
+              // markedKatex({
+              //   throwOnError: false,
+              //   nonStandard: true
+              // })
+            )
+            .parse(text, {
+              gfm: true,
+              renderer: renderer,
+            });
 
           if (isReadMe()) {
             document.getElementById('readme').innerHTML = text;
